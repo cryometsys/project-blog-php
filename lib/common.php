@@ -5,27 +5,21 @@
  * 
  * @return string
  */
-function getRootPath() {
-    return realpath(__DIR__ . '/..');
-}
+function getRootPath() { return realpath(__DIR__ . '/..'); }
 
 /**
  * Gets the full path for the database file
  * 
  * @return string
  */
-function getDatabasePath() {
-    return getRootPath() . '/data/data.sqlite';
-}
+function getDatabasePath() { return getRootPath() . '/data/data.sqlite'; }
 
 /**
  * Gets the DSN for the SQLite connection
  * 
  * @return string
  */
-function getDsn() {
-    return 'sqlite:' . getDatabasePath();
-}
+function getDsn() { return 'sqlite:' . getDatabasePath(); }
 
 /**
  * Gets the PDO object for database access
@@ -47,42 +41,63 @@ function getPDO() {
  * @param string $html
  * @return string
  */
-function htmlEscape($html) {
-    return htmlspecialchars($html, ENT_HTML5, 'UTF-8');
-}
+function htmlEscape($html) { return htmlspecialchars($html, ENT_HTML5, 'UTF-8'); }
 
 function convertSqlDate($sqlDate) {
     /* @var $date DateTime */
     $date = DateTime::createFromFormat('Y-m-d H:i:s', $sqlDate);
-
     return $date->format('d M Y, H:i');
 }
 
-/**
- * Returns the number of comments for the specified post
- * @param PDO $pdo
- * @param integer $postId
- * @return integer
- */
-function countCommentsForPost(PDO $pdo, $postId) {
-    $sql = "
-        SELECT
-            COUNT(*) c
-        FROM
-            comment
-        WHERE
-            post_id = :post_id
-    ";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute(
-        array('post_id' => $postId, )
-    );
+function getSqlDateForNow() { return date('Y-m-d H:i:s'); }
 
-    return (int) $stmt->fetchColumn();
+/**
+ * Gets a list of posts in reverse order
+ * 
+ * @param PDO $pdo
+ * @return array
+ */
+function getAllPosts(PDO $pdo) {
+    $stmt = $pdo->query(
+        'SELECT
+            id, title, created_at, body,
+            (SELECT COUNT(*) FROM comment WHERE comment.post_id = post.id) comment_count
+        FROM
+            post
+        ORDER BY
+            created_at DESC'
+    );
+    if ($stmt === false)
+        throw new Exception('There was a problem running this query');
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Converts unsafe text to safe, paragraphed, HTML
+ * 
+ * @param string $text
+ * @return string
+ */
+function convertNewlinesToParagraphs($text) {
+    $escaped = htmlEscape($text);
+    return '<p>' . str_replace("\n", "</p><p>", $escaped) . '</p>';
+}
+
+function redirectAndExit($script) {
+    // Get the domain-relative URL (e.g. /blog/whatever.php or /whatever.php) and work
+    // out the folder (e.g. /blog/ or /).
+    $relativeUrl = $_SERVER['PHP_SELF'];
+    $urlFolder = substr($relativeUrl, 0, strrpos($relativeUrl, '/') + 1);
+    // Redirect to the full URL (http://myhost/blog/script.php)
+    $host = $_SERVER['HTTP_HOST'];
+    $fullUrl = 'http://' . $host . $urlFolder . $script;
+    header('Location: ' . $fullUrl);
+    exit();
 }
 
 /**
  * Returns all the comments for the specified post
+ * 
  * @param PDO $pdo
  * @param integer $postId
  * return array
@@ -104,33 +119,6 @@ function getCommentsForPost(PDO $pdo, $postId) {
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-function getSqlDateForNow() {
-    return date('Y-m-d H:i:s');
-}
-
-/**
- * Converts unsafe text to safe, paragraphed, HTML
- *
- * @param string $text
- * @return string
- */
-function convertNewlinesToParagraphs($text) {
-    $escaped = htmlEscape($text);
-    return '<p>' . str_replace("\n", "</p><p>", $escaped) . '</p>';
-}
-
-function redirectAndExit($script) {
-    // Get the domain-relative URL (e.g. /blog/whatever.php or /whatever.php) and work
-    // out the folder (e.g. /blog/ or /).
-    $relativeUrl = $_SERVER['PHP_SELF'];
-    $urlFolder = substr($relativeUrl, 0, strrpos($relativeUrl, '/') + 1);
-    // Redirect to the full URL (http://myhost/blog/script.php)
-    $host = $_SERVER['HTTP_HOST'];
-    $fullUrl = 'http://' . $host . $urlFolder . $script;
-    header('Location: ' . $fullUrl);
-    exit();
-}
-
 function tryLogin(PDO $pdo, $username, $password) {
     $sql = "
         SELECT
@@ -139,6 +127,7 @@ function tryLogin(PDO $pdo, $username, $password) {
             user
         WHERE
             username = :username
+            AND is_enabled = 1
     ";
     $stmt = $pdo->prepare($sql);
     $stmt->execute(
@@ -151,11 +140,11 @@ function tryLogin(PDO $pdo, $username, $password) {
 }
 /**
  * Logs the user in
- *
+ * 
  * For safety, we ask PHP to regenerate the cookie, so if a user logs onto a site that a cracker
  * has prepared for him/her (e.g. on a public computer) the cracker's copy of the cookie ID will be
  * useless.
- *
+ * 
  * @param string $username
  */
 function login($username) {
@@ -169,6 +158,7 @@ function login($username) {
 function logout() {
     unset($_SESSION['logged_in_username']);
 }
+
 function getAuthUser() {
     return isLoggedIn() ? $_SESSION['logged_in_username'] : null;
 }
@@ -190,6 +180,7 @@ function getAuthUserId(PDO $pdo) {
             user
         WHERE
             username = :username
+            AND is_enabled = 1
     ";
     $stmt = $pdo->prepare($sql);
     $stmt->execute(

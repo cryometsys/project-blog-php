@@ -52,7 +52,13 @@ if ($_POST) {
         <?php require 'templates/head.php' ?>
     </head>
     <body>
-        <?php require 'templates/title.php' ?>
+        <?php require 'templates/top-menu.php' ?>
+        <?php if(isset($_GET['post_id'])): ?>
+            <h1>Edit Post</h1>
+        <?php else: ?>
+            <h1>New Post</h1>
+        <?php endif ?>
+
         <?php if ($errors): ?>
             <div class="error box">
                 <ul>
@@ -86,6 +92,7 @@ if ($_POST) {
                     type="submit"
                     value="Save post"
                 />
+                <a href="index.php">Cancel</a>
             </div>
         </form>
     </body>
